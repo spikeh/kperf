@@ -323,6 +323,7 @@ worker_msg_end_test(struct worker_state *self, struct kpm_header *hdr)
 	self->cpu_start = NULL;
 	list_for_each_safe(&self->connections, conn, next, connections)
 		worker_kill_conn(self, conn);
+	self->ended = 1;
 }
 
 static const struct {
@@ -783,6 +784,7 @@ void NORETURN pworker_main(struct worker_main_args args)
 		self.ops->wait(&self, msec);
 	}
 
+	free(self.io_state);
 	kpm_dbg("exiting!");
 	exit(0);
 }

@@ -20,6 +20,7 @@ struct worker_state {
 	int epollfd;
 	unsigned int id;
 	int quit;
+	int ended;
 	struct kpm_test *test;
 	struct cpu_stat *cpu_start;
 	struct timemono test_start;
@@ -29,6 +30,7 @@ struct worker_state {
 	struct worker_state_devmem devmem;
 	bool validate;
 	const struct worker_ops *ops;
+	void *io_state;
 };
 
 struct connection {
