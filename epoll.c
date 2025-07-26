@@ -366,7 +366,7 @@ static void epoll_wait_(struct worker_state *self, int msec)
 	}
 }
 
-static const struct worker_ops epoll_worker_ops = {
+static const struct io_ops epoll_io_ops = {
 	.prep		= epoll_prep,
 	.wait		= epoll_wait_,
 	.conn_add	= epoll_conn_add,
@@ -375,5 +375,5 @@ static const struct worker_ops epoll_worker_ops = {
 
 void worker_epoll_init(struct worker_state *self)
 {
-	self->ops = &epoll_worker_ops;
+	self->ops = &epoll_io_ops;
 }
