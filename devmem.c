@@ -60,7 +60,7 @@ static int ethtool(const char *ifname, void *data)
 	return ret;
 }
 
-static void reset_flow_steering(const char *ifname)
+void reset_flow_steering(const char *ifname)
 {
 	struct ethtool_rxnfc cnt = {};
 	struct ethtool_rxnfc *rules;
@@ -127,38 +127,34 @@ static int add_steering_rule(struct sockaddr_in6 *server_sin,
 	return ethtool(ifname, &add);
 }
 
-static int rss_context_delete(struct session_state_devmem *devmem)
+int rss_context_delete(char *ifname, int rss_context)
 {
 	struct ethtool_rxfh set = {};
 
-	if (!devmem->rss_context)
-		return 0;
-
 	set.cmd = ETHTOOL_SRSSH;
-	set.rss_context = devmem->rss_context;
+	set.rss_context = rss_context;
 	set.indir_size = 0;
 
-	if (ethtool(devmem->ifname, &set) < 0) {
-		warn("ethtool failed to delete RSS context %u", devmem->rss_context);
+	if (ethtool(ifname, &set) < 0) {
+		warn("ethtool failed to delete RSS context %u", rss_context);
 		return -1;
 	}
-
-	devmem->rss_context = 0;
 
 	return 0;
 }
 
-static int rss_context_equal(struct session_state_devmem *devmem, int start_queue,
-			     int num_queues, struct sockaddr_in6 *addr)
+int rss_context_equal(char *ifname, int start_queue, int num_queues,
+		      struct sockaddr_in6 *addr)
 {
 	struct ethtool_rxfh get = {};
 	struct ethtool_rxfh *set;
 	__u32 indir_bytes;
+	int rss_context;
 	int queue;
 	int ret;
 
 	get.cmd = ETHTOOL_GRSSH;
-	if (ethtool(devmem->ifname, &get) < 0) {
+	if (ethtool(ifname, &get) < 0) {
 		warn("ethtool failed to get RSS context");
 		return -1;
 	}
@@ -182,15 +178,15 @@ static int rss_context_equal(struct session_state_devmem *devmem, int start_queu
 			queue = start_queue;
 	}
 
-	if (ethtool(devmem->ifname, set) < 0) {
+	if (ethtool(ifname, set) < 0) {
 		warn("ethtool failed to create RSS context");
 		ret = -1;
 		goto free_set;
 	}
 
-	devmem->rss_context = set->rss_context;
+	rss_context = set->rss_context;
 
-	if (add_steering_rule(addr, devmem->ifname, devmem->rss_context) < 0) {
+	if (add_steering_rule(addr, ifname, rss_context) < 0) {
 		warn("Failed to add rule to RSS context");
 		ret = -1;
 		goto delete_context;
@@ -198,10 +194,10 @@ static int rss_context_equal(struct session_state_devmem *devmem, int start_queu
 
 	free(set);
 
-	return 0;
+	return rss_context;
 
 delete_context:
-	rss_context_delete(devmem);
+	rss_context_delete(ifname, rss_context);
 
 free_set:
 	free(set);
@@ -209,7 +205,7 @@ free_set:
 	return ret;
 }
 
-static int rss_equal(const char *ifname, int max_queue)
+int rss_equal(const char *ifname, int max_queue)
 {
 	struct ethtool_rxfh_indir get = {};
 	struct ethtool_rxfh_indir *set;
@@ -238,7 +234,7 @@ static int rss_equal(const char *ifname, int max_queue)
 	return ret;
 }
 
-static int rxq_num(int ifindex)
+int rxq_num(int ifindex)
 {
 	struct ethtool_channels_get_req *req;
 	struct ethtool_channels_get_rsp *rsp;
@@ -453,7 +449,7 @@ static void udmabuf_free(struct memory_buffer *mem)
 	free(mem);
 }
 
-static void inet_to_inet6(struct sockaddr *addr, struct sockaddr_in6 *out)
+void inet_to_inet6(struct sockaddr *addr, struct sockaddr_in6 *out)
 {
 	out->sin6_addr.s6_addr32[3] = ((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[0];
 	out->sin6_addr.s6_addr32[0] = 0;
@@ -463,7 +459,7 @@ static void inet_to_inet6(struct sockaddr *addr, struct sockaddr_in6 *out)
 	out->sin6_family = AF_INET6;
 }
 
-static int find_iface(struct sockaddr_in6 *addr, char ifname[IFNAMSIZ])
+int find_iface(struct sockaddr_in6 *addr, char ifname[IFNAMSIZ])
 {
 	struct ifaddrs *ifaddr, *ifa;
 	struct sockaddr_in6 tmp;
@@ -702,6 +698,7 @@ int devmem_setup(struct session_state_devmem *devmem, int fd,
 	struct ynl_error yerr;
 	int max_kernel_queue;
 	socklen_t optlen;
+	int rss_context;
 	int ifindex;
 	int rxqn;
 	int ret;
@@ -773,11 +770,14 @@ int devmem_setup(struct session_state_devmem *devmem, int fd,
 
 	memcpy(devmem->ifname, ifname, IFNAMSIZ);
 
-	if (rss_context_equal(devmem, max_kernel_queue, num_queues, &addr) < 0) {
+	rss_context = rss_context_equal(devmem->ifname, max_kernel_queue,
+					num_queues, &addr);
+	if (rss_context < 0) {
 		warnx("Failed to setup RSS context");
 		ret = -1;
 		goto undo_rss;
 	}
+	devmem->rss_context = rss_context;
 
 	queues = calloc(num_queues, sizeof(*queues));
 	if (!queues) {
@@ -806,7 +806,7 @@ int devmem_setup(struct session_state_devmem *devmem, int fd,
 free_queues:
 	free(queues);
 undo_rss_context:
-	rss_context_delete(devmem);
+	rss_context_delete(devmem->ifname, devmem->rss_context);
 undo_rss:
 	rss_equal(ifname, rxqn);
 free_memory:
@@ -824,7 +824,7 @@ int devmem_teardown(struct session_state_devmem *devmem)
 	int ifindex;
 
 	reset_flow_steering(devmem->ifname);
-	rss_context_delete(devmem);
+	rss_context_delete(devmem->ifname, devmem->rss_context);
         ifindex = if_nametoindex(devmem->ifname);
 	if (ifindex > 0) {
 		rxqn = rxq_num(ifindex);

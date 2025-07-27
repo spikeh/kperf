@@ -22,4 +22,13 @@ int devmem_setup_tx(struct session_state_devmem *devmem, enum memory_provider_ty
 		    int dmabuf_tx_size_mb, struct pci_dev *dev, struct sockaddr_in6 *addr);
 int devmem_bind_socket(struct session_state_devmem *devmem, int fd);
 
+void reset_flow_steering(const char *ifname);
+int rss_context_delete(char *ifname, int rss_context);
+int rss_context_equal(char *ifname, int start_queue, int num_queues,
+		      struct sockaddr_in6 *addr);
+int rss_equal(const char *ifname, int max_queue);
+int rxq_num(int ifindex);
+void inet_to_inet6(struct sockaddr *addr, struct sockaddr_in6 *out);
+int find_iface(struct sockaddr_in6 *addr, char ifname[IFNAMSIZ]);
+
 #endif /* DEVMEM_H */
