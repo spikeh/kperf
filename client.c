@@ -65,6 +65,7 @@ static struct {
 	bool validate;
 	bool iou_src;
 	bool iou_dst;
+	bool zerocopy_rx;
 } opt = {
 	.tls_ver = TLS_1_3_VERSION,
 	.src = "localhost",
@@ -98,6 +99,7 @@ static struct {
 	},
 	.iou_src = false,
 	.iou_dst = false,
+	.zerocopy_rx = false,
 };
 
 #define dbg(fmt...) while (0) { warnx(fmt); }
@@ -277,6 +279,8 @@ static const struct opt_table opts[] = {
 			"Use io_uring on source server"),
 	OPT_WITHOUT_ARG("--iou-dst", opt_set_bool, &opt.iou_dst,
 			"Use io_uring on destination server"),
+	OPT_EARLY_WITHOUT_ARG("--zerocopy-rx", opt_set_bool, &opt.zerocopy_rx,
+			      "Use zero copy on receive"),
 	OPT_ENDTABLE
 };
 
@@ -754,11 +758,13 @@ int main(int argc, char *argv[])
 	if (opt.msg_trunc && opt.validate)
 		errx(1, "--msg-trunc and --validate yes are mutually exclusive");
 
-	if (opt.msg_trunc && opt.devmem_rx)
-		errx(1, "--msg-trunc and --devmem-rx are mutually exclusive");
+	if ((int)opt.msg_trunc + (int)opt.devmem_rx + (int)opt.zerocopy_rx > 1)
+		errx(1, "--msg-trunc, --devmem-rx and --zerocopy-rx are mutually exclusive");
 
 	if (opt.msg_trunc)
 		rx_mode = KPM_RX_MODE_SOCKET_TRUNC;
+	else if (opt.zerocopy_rx)
+		rx_mode = KPM_RX_MODE_SOCKET_ZEROCOPY;
 	else if (opt.devmem_rx)
 		rx_mode = KPM_RX_MODE_DEVMEM;
 
