@@ -17,10 +17,10 @@
 
 extern unsigned char patbuf[KPM_MAX_OP_CHUNK + PATTERN_PERIOD + 1];
 
-static struct connection *
+static struct worker_connection *
 epoll_find_connection_by_fd(struct worker_state *self, int fd)
 {
-	struct connection *conn;
+	struct worker_connection *conn;
 
 	list_for_each(&self->connections, conn, connections) {
 		if (conn->fd == fd)
@@ -30,7 +30,7 @@ epoll_find_connection_by_fd(struct worker_state *self, int fd)
 }
 
 static void
-epoll_conn_close(struct worker_state *self, struct connection *conn)
+epoll_conn_close(struct worker_state *self, struct worker_connection *conn)
 {
 	struct epoll_event ev = {};
 
@@ -42,7 +42,7 @@ epoll_conn_close(struct worker_state *self, struct connection *conn)
 }
 
 static void
-epoll_conn_add(struct worker_state *self, struct connection *conn)
+epoll_conn_add(struct worker_state *self, struct worker_connection *conn)
 {
 	struct epoll_event ev = {};
 	int zc;
@@ -77,7 +77,7 @@ static void epoll_handle_main_sock(struct worker_state *self)
 }
 
 static void
-epoll_send_arm(struct worker_state *self, struct connection *conn,
+epoll_send_arm(struct worker_state *self, struct worker_connection *conn,
 	       unsigned int events)
 {
 	struct epoll_event ev = {};
@@ -92,7 +92,7 @@ epoll_send_arm(struct worker_state *self, struct connection *conn,
 }
 
 static void
-epoll_send_disarm(struct worker_state *self, struct connection *conn,
+epoll_send_disarm(struct worker_state *self, struct worker_connection *conn,
 		  unsigned int events)
 {
 	struct epoll_event ev = {};
@@ -107,7 +107,7 @@ epoll_send_disarm(struct worker_state *self, struct connection *conn,
 }
 
 static void
-epoll_handle_completions(struct worker_state *self, struct connection *conn,
+epoll_handle_completions(struct worker_state *self, struct worker_connection *conn,
 			 unsigned int events)
 {
 	struct sock_extended_err *serr;
@@ -173,7 +173,7 @@ kill_conn:
 }
 
 static void
-epoll_handle_send(struct worker_state *self, struct connection *conn,
+epoll_handle_send(struct worker_state *self, struct worker_connection *conn,
 		  unsigned int events)
 {
 	unsigned int rep = max_t(int, 10, conn->to_send / conn->write_size + 1);
@@ -233,7 +233,7 @@ epoll_handle_send(struct worker_state *self, struct connection *conn,
 	}
 }
 
-static ssize_t epoll_handle_regular_recv(struct worker_state *self, struct connection *conn, size_t chunk, int rep, bool validate)
+static ssize_t epoll_handle_regular_recv(struct worker_state *self, struct worker_connection *conn, size_t chunk, int rep, bool validate)
 {
 	bool msg_trunc = self->rx_mode == KPM_RX_MODE_SOCKET_TRUNC;
 	void *src = &patbuf[conn->tot_recv % PATTERN_PERIOD];
@@ -255,7 +255,7 @@ static ssize_t epoll_handle_regular_recv(struct worker_state *self, struct conne
 }
 
 static void
-epoll_handle_recv(struct worker_state *self, struct connection *conn)
+epoll_handle_recv(struct worker_state *self, struct worker_connection *conn)
 {
 	unsigned int rep = 10;
 
@@ -305,7 +305,7 @@ static void
 epoll_handle_conn(struct worker_state *self, int fd, unsigned int events)
 {
 	static int warnd_unexpected_pi;
-	struct connection *conn;
+	struct worker_connection *conn;
 
 	conn = epoll_find_connection_by_fd(self, fd);
 
