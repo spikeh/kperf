@@ -4,6 +4,7 @@
 #include "iou.h"
 
 #include <err.h>
+#include <net/if.h>
 #include <stdlib.h>
 #include <string.h>
 #include <liburing.h>
@@ -11,7 +12,9 @@
 
 #include <ccan/minmax/minmax.h>
 
+#include "proto.h"
 #include "proto_dbg.h"
+#include "devmem.h"
 
 extern unsigned char patbuf[KPM_MAX_OP_CHUNK + PATTERN_PERIOD + 1];
 
@@ -333,4 +336,88 @@ static const struct io_ops iou_io_ops = {
 void worker_iou_init(struct worker_state *self)
 {
 	self->ops = &iou_io_ops;
+}
+
+int iou_zerocopy_rx_setup(struct session_state_iou *iou, int fd,
+			  int num_queues)
+{
+	char ifname[IFNAMSIZ] = {};
+	struct sockaddr_in6 addr;
+	int max_kernel_queue;
+	socklen_t optlen;
+	int rss_context;
+	int ifindex;
+	int rxqn;
+	int ret;
+
+	if (num_queues <= 0) {
+		warnx("Invalid number of RX queues: %u", num_queues);
+		return -1;
+	}
+
+	optlen = sizeof(addr);
+	if (getsockname(fd, (struct sockaddr *)&addr, &optlen) < 0) {
+		warn("Failed to query socket address");
+		return -1;
+	}
+
+	if (addr.sin6_family == AF_INET)
+		inet_to_inet6((void *)&addr, &addr);
+
+	ifindex = find_iface(&addr, ifname);
+	if (ifindex < 0) {
+		warnx("Failed to resolve ifindex: %s", strerror(-ifindex));
+		return -1;
+	}
+	memcpy(iou->ifname, ifname, IFNAMSIZ);
+
+	rxqn = rxq_num(ifindex);
+	if (rxqn < 2) {
+		warnx("Invalid number of queues: %d", rxqn);
+		return -1;
+	}
+
+	if (num_queues >= rxqn - 1) {
+		warnx("Invalid number of RX queues (%u) requested (max: %u)",
+		      num_queues, rxqn - 1);
+		return -1;
+	}
+
+	max_kernel_queue = rxqn - num_queues;
+	iou->queue_id = max_kernel_queue;
+
+	reset_flow_steering(ifname);
+	if (rss_equal(ifname, max_kernel_queue)) {
+		warnx("Failed to setup RSS");
+		return -1;
+	}
+
+	rss_context = rss_context_equal(ifname, max_kernel_queue, num_queues, &addr);
+	if (rss_context < 0) {
+		warnx("Failed to setup RSS context");
+		ret = -1;
+		goto undo_rss;
+	}
+	iou->rss_context = rss_context;
+
+	return 0;
+undo_rss:
+	rss_equal(ifname, rxqn);
+	return ret;
+}
+
+int iou_zerocopy_rx_teardown(struct session_state_iou *iou)
+{
+	int rxqn;
+	int ifindex;
+
+	reset_flow_steering(iou->ifname);
+	rss_context_delete(iou->ifname, iou->rss_context);
+	ifindex = if_nametoindex(iou->ifname);
+	if (ifindex > 0) {
+		rxqn = rxq_num(ifindex);
+		if (rxqn > 0)
+			rss_equal(iou->ifname, rxqn);
+	}
+	return 0;
 }
