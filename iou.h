@@ -6,12 +6,6 @@
 #ifndef IOU_H
 #define IOU_H 1
 
-struct session_state_iou {
-	char ifname[IFNAMSIZ];
-	int rss_context;
-	int queue_id;
-};
-
 void worker_iou_init(struct worker_state *state);
 
 int iou_zerocopy_rx_setup(struct session_state_iou *iou, int fd,

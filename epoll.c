@@ -367,11 +367,16 @@ static void epoll_wait_(struct worker_state *self, int msec)
 	}
 }
 
+static void epoll_exit(struct worker_state */*self*/)
+{
+}
+
 static const struct io_ops epoll_io_ops = {
 	.prep		= epoll_prep,
 	.wait		= epoll_wait_,
 	.conn_add	= epoll_conn_add,
 	.conn_close	= epoll_conn_close,
+	.exit		= epoll_exit,
 };
 
 void worker_epoll_init(struct worker_state *self)

@@ -28,6 +28,7 @@ struct worker_state {
 	unsigned int test_len_msec;
 	struct list_head connections;
 	struct worker_state_devmem devmem;
+	struct worker_state_iou iou;
 	bool validate;
 	const struct io_ops *ops;
 	void *io_state;
@@ -64,6 +65,7 @@ struct io_ops {
 	void (*wait)(struct worker_state *state, int msec);
 	void (*conn_add)(struct worker_state *state, struct worker_connection *conn);
 	void (*conn_close)(struct worker_state *state, struct worker_connection *conn);
+	void (*exit)(struct worker_state *state);
 };
 
 void worker_handle_proto(struct worker_state *self, struct kpm_header *hdr);
