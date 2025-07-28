@@ -43,6 +43,8 @@
 
 extern unsigned char patbuf[KPM_MAX_OP_CHUNK + PATTERN_PERIOD + 1];
 
+#define SCM_DEVMEM_DMABUF SO_DEVMEM_DMABUF
+
 static int ethtool(const char *ifname, void *data)
 {
 	struct ifreq ifr = {};

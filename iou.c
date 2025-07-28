@@ -212,6 +212,8 @@ static void iou_handle_recvzc(struct worker_state *self, struct io_uring_cqe *cq
 	rcqe = (struct io_uring_zcrx_cqe *)(cqe + 1);
 	mask = (1ULL << IORING_ZCRX_AREA_SHIFT) - 1;
 	data = (unsigned char *)state->area_ptr + (rcqe->off & mask);
+	if (n != 4096)
+		kpm_info("recvzc ptr=%p len=%ld", data, n);
 
 	src = &patbuf[conn->tot_recv % PATTERN_PERIOD];
 	if (self->validate && memcmp(data, src, n))
