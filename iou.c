@@ -122,11 +122,9 @@ static void iou_handle_send(struct worker_state *self, struct io_uring_cqe *cqe)
 static void iou_conn_add_recv(struct io_uring *ring, struct worker_connection *conn)
 {
 	struct io_uring_sqe *sqe;
-	size_t chunk;
 
-	chunk = min_t(size_t, conn->read_size, conn->to_recv);
 	sqe = io_uring_get_sqe(ring);
-	io_uring_prep_recv(sqe, conn->fd, conn->rxbuf, chunk, 0);
+	io_uring_prep_recv(sqe, conn->fd, conn->rxbuf, conn->read_size, 0);
 	io_uring_sqe_set_data(sqe, tag(conn, IOU_REQ_TYPE_RECV));
 }
 
@@ -488,12 +486,10 @@ static void iou_conn_add(struct worker_state *state, struct worker_connection *c
 	if (conn->to_send)
 		iou_conn_add_send(ring, conn);
 
-	if (conn->to_recv) {
-		if (state->rx_mode == KPM_RX_MODE_SOCKET_ZEROCOPY)
-			iou_conn_add_recvzc(ring, conn, get_iou_state(state)->zcrx_id);
-		else
-			iou_conn_add_recv(ring, conn);
-	}
+	if (state->rx_mode == KPM_RX_MODE_SOCKET_ZEROCOPY)
+		iou_conn_add_recvzc(ring, conn, get_iou_state(state)->zcrx_id);
+	else
+		iou_conn_add_recv(ring, conn);
 }
 
 static void iou_conn_close(struct worker_state *state, struct worker_connection *conn)
